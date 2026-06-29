@@ -68,6 +68,8 @@ a.ext{color:var(--blue);text-decoration:none;font-weight:600}a.ext:hover{text-de
   <nav>
     <button data-t="metric" class="on">대학 지표 분석</button>
     <button data-t="tuition">등록금</button>
+    <button data-t="schol">장학금·실부담</button>
+    <button data-t="card">대학 카드</button>
     <button data-t="region">지역 분석(취업률)</button>
     <button data-t="jeon">전문대 합격선</button>
     <button data-t="major">학과</button>
@@ -98,6 +100,24 @@ a.ext{color:var(--blue);text-decoration:none;font-weight:600}a.ext:hover{text-de
     <div id="t_agg" class="muted"></div>
     <div style="max-width:680px;height:420px;margin:6px auto 16px"><canvas id="t_chart"></canvas></div>
     <div id="tuition_res"></div>
+  </div></section>
+
+  <section id="schol" class="hide"><div class="card">
+    <h2>장학금 · 실부담 <span class="muted">등록금 − 1인당 평균 장학금 (재적학생 기준 · 189개 대학)</span></h2>
+    <div class="row">
+      <select id="s_estb" onchange="renderSchol()" style="flex:0 1 140px"><option value="">설립 전체</option><option value="국공립">국공립</option><option value="사립">사립</option></select>
+      <select id="s_ord" onchange="renderSchol()" style="flex:0 1 150px"><option value="asc">실부담 적은 순</option><option value="desc">실부담 많은 순</option></select>
+      <input type="text" id="schol_q" placeholder="🔎 대학·지역 필터">
+    </div>
+    <div id="s_agg" class="muted"></div>
+    <div style="max-width:680px;height:420px;margin:6px auto 16px"><canvas id="s_chart"></canvas></div>
+    <div id="schol_res"></div>
+  </div></section>
+
+  <section id="card" class="hide"><div class="card">
+    <h2>대학 카드 <span class="muted">주소·전화·홈페이지·설립일 + 등록금·재학생 (238개 대학)</span></h2>
+    <div class="row"><input type="text" id="card_q" placeholder="🔎 대학명 검색 (예: 부산대, 인하, 가천)" oninput="renderCard()"></div>
+    <div id="card_res" class="muted">대학명을 입력하세요.</div>
   </div></section>
 
   <section id="region" class="hide"><div class="card">
@@ -140,7 +160,7 @@ a.ext{color:var(--blue);text-decoration:none;font-weight:600}a.ext:hover{text-de
 
 <script>
 const $=s=>document.querySelector(s);
-let UNIV=[],RATE=[],MAJOR=[],JEON=[],METRIC=[],REGION=[],TUITION=[],STAT={};
+let UNIV=[],RATE=[],MAJOR=[],JEON=[],METRIC=[],REGION=[],TUITION=[],SCHOL=[],UNIVINFO=[],STAT={};
 const PAGE=50, BOARDS={};
 const grade=v=>(!v||v==='0')?'<span class="muted" style="margin:0">미공개</span>':v;
 const td=c=>'<td>'+c+'</td>';
@@ -164,8 +184,8 @@ function makeBoard(id, all, head, rowFn, filtFn){
   b.render(); return b;
 }
 
-Promise.all(['univ','rate','major','jeon','metric','region','tuition','stat'].map(n=>fetch('data/'+n+'.json').then(r=>r.json())))
- .then(function(a){UNIV=a[0];RATE=a[1];MAJOR=a[2];JEON=a[3];METRIC=a[4];REGION=a[5];TUITION=a[6];STAT=a[7];init();})
+Promise.all(['univ','rate','major','jeon','metric','region','tuition','scholarship','univinfo','stat'].map(n=>fetch('data/'+n+'.json').then(r=>r.json())))
+ .then(function(a){UNIV=a[0];RATE=a[1];MAJOR=a[2];JEON=a[3];METRIC=a[4];REGION=a[5];TUITION=a[6];SCHOL=a[7];UNIVINFO=a[8];STAT=a[9];init();})
  .catch(function(e){$('#loading').innerHTML='데이터 로드 실패: '+e;});
 
 function init(){
@@ -176,9 +196,10 @@ function init(){
     .map(function(x){return '<span class="chip"><b>'+x[1]+'</b> '+x[0]+'</span>';}).join('');
   document.querySelectorAll('nav button').forEach(function(btn){btn.onclick=function(){
     document.querySelectorAll('nav button').forEach(function(x){x.classList.toggle('on',x===btn);});
-    ['metric','tuition','region','jeon','major','rate','about'].forEach(function(id){$('#'+id).classList.toggle('hide',id!==btn.dataset.t);});
+    ['metric','tuition','schol','card','region','jeon','major','rate','about'].forEach(function(id){$('#'+id).classList.toggle('hide',id!==btn.dataset.t);});
     if(btn.dataset.t==='region'&&!window._rgLoaded){window._rgLoaded=1;renderRegion();}
-    if(btn.dataset.t==='tuition'&&!window._tLoaded){window._tLoaded=1;renderTuition();}};});
+    if(btn.dataset.t==='tuition'&&!window._tLoaded){window._tLoaded=1;renderTuition();}
+    if(btn.dataset.t==='schol'&&!window._sLoaded){window._sLoaded=1;renderSchol();}};});
   renderMetric();
   // 게시판 3종
   makeBoard('jeon', JEON, ['연도','대학','학과','모집','전형','경쟁률','평균(학생부)','최저(학생부)','평균(수능)','최저(수능)'],
@@ -197,8 +218,41 @@ function init(){
     function(r,q){return r.name.indexOf(q)>=0;});
 }
 
-let mchart=null, rgchart=null, tchart=null;
+let mchart=null, rgchart=null, tchart=null, schart=null;
 const M_LABEL={'신입생충원율':'신입생 충원율','입학전형최종등록률':'입학전형 최종등록률','중도탈락현황':'중도탈락률'};
+function netCell(n){return n<0?'<b style="color:#1f7a4d">장학>등록('+won(-n)+')</b>':'<b>'+won(n)+'</b>';}
+function renderSchol(){
+  const estb=$('#s_estb').value, ord=$('#s_ord').value;
+  let list=SCHOL.slice();
+  if(estb)list=list.filter(function(r){return estbGroup(r.estb)===estb;});
+  const avg=function(a){return a.length?a.reduce(function(x,y){return x+y;},0)/a.length:0;};
+  const zg={};list.forEach(function(r){(zg[r.zone]=zg[r.zone]||[]).push(r.net);});
+  let zoneAvg=Object.keys(zg).map(function(k){return {k:k,avg:avg(zg[k])};}).sort(function(a,b){return a.avg-b.avg;});
+  const eg={국공립:[],사립:[]};SCHOL.forEach(function(r){eg[estbGroup(r.estb)].push(r.net);});
+  $('#s_agg').innerHTML='평균 실부담 <b>'+won(avg(list.map(function(r){return r.net;})))+'</b> · 국공립 <b style="color:#1f7a4d">'+won(avg(eg.국공립))+'</b> · 사립 <b style="color:#c0392b">'+won(avg(eg.사립))+'</b> · 1인당 평균 장학 '+won(avg(list.map(function(r){return r.per;})))+' · '+list.length+'개 대학';
+  if(schart)schart.destroy();
+  schart=new Chart($('#s_chart'),{type:'bar',data:{labels:zoneAvg.map(function(z){return z.k;}),datasets:[{label:'평균 실부담(만원)',data:zoneAvg.map(function(z){return Math.round(z.avg/10000);}),backgroundColor:'#1a5cd4'}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},title:{display:true,text:'지역별 평균 실부담(만원)'}},scales:{x:{beginAtZero:true}}}});
+  list.sort(function(a,b){return ord==='asc'?a.net-b.net:b.net-a.net;});
+  makeBoard('schol', list, ['대학','지역','설립','등록금','1인당 장학','실부담','교내%'],
+    function(r){return [r.univ,r.zone,'<span class="tag">'+r.estb+'</span>',won(r.reg),won(r.per),netCell(r.net),r.inrate+'%'];},
+    function(r,q){return r.univ.indexOf(q)>=0||r.zone.indexOf(q)>=0;});
+}
+function renderCard(){
+  const q=$('#card_q').value.trim();
+  if(!q){$('#card_res').innerHTML='<div class="muted">대학명을 입력하세요.</div>';return;}
+  const hit=UNIVINFO.filter(function(u){return u.univ.indexOf(q)>=0;}).slice(0,12);
+  if(!hit.length){$('#card_res').innerHTML='<div class="muted">결과 없음</div>';return;}
+  $('#card_res').innerHTML='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px">'+hit.map(function(u){
+    return '<div style="border:1px solid var(--line);border-radius:12px;padding:14px 16px;background:#fff">'+
+      '<div style="font-weight:800;font-size:16px;color:var(--navy);letter-spacing:-.02em">'+u.univ+'</div>'+
+      '<div class="muted" style="margin:3px 0 10px">'+u.zone+' · '+(u.estb||'')+(u.founded?(' · 설립 '+u.founded):'')+'</div>'+
+      '<table style="font-size:13px"><tr><th style="width:64px">등록금</th><td>'+(u.reg?won(parseFloat(u.reg)):'-')+'</td></tr>'+
+      '<tr><th>재학생</th><td>'+(u.students?parseInt(u.students).toLocaleString()+'명':'-')+'</td></tr>'+
+      '<tr><th>주소</th><td>'+(u.addr||'-')+'</td></tr>'+
+      '<tr><th>전화</th><td>'+(u.tel||'-')+'</td></tr>'+
+      '<tr><th>홈페이지</th><td>'+(u.hmpg?'<a class="ext" href="'+u.hmpg+'" target="_blank" rel="noopener">바로가기 ↗</a>':'-')+'</td></tr></table></div>';
+  }).join('')+'</div>';
+}
 function won(n){return n>=10000?Math.round(n/10000).toLocaleString()+'만원':Math.round(n).toLocaleString()+'원';}
 function renderTuition(){
   const estb=$('#t_estb').value, ord=$('#t_ord').value;
