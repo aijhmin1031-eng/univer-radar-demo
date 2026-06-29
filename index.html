@@ -53,8 +53,8 @@ tbody tr:hover{background:#f6faff}
 .diag{background:var(--tint);padding:10px 12px;border-radius:10px;border:1px solid var(--bd2)}
 a.ext{color:var(--blue);text-decoration:none;font-weight:600}a.ext:hover{text-decoration:underline}
 #metric tbody tr,#tuition tbody tr,#schol tbody tr,#rate tbody tr,#major tbody tr{cursor:pointer}
-#dimmer{position:fixed;inset:0;background:rgba(16,42,82,.34);z-index:40;opacity:0;pointer-events:none;transition:.2s}
-#dimmer.open{opacity:1;pointer-events:auto}
+body{transition:padding-right .26s cubic-bezier(.4,0,.2,1)}
+body.dopen{padding-right:440px}
 #drawer{position:fixed;top:0;right:0;width:440px;max-width:93vw;height:100vh;background:#fff;border-left:1px solid var(--line);box-shadow:-12px 0 32px rgba(16,42,82,.16);transform:translateX(103%);transition:transform .26s cubic-bezier(.4,0,.2,1);z-index:50;overflow-y:auto}
 #drawer.open{transform:translateX(0)}
 .dhead{position:sticky;top:0;background:linear-gradient(135deg,var(--navy),var(--blue-d));color:#fff;padding:18px 20px;display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
@@ -66,7 +66,7 @@ a.ext{color:var(--blue);text-decoration:none;font-weight:600}a.ext:hover{text-de
 .dsec h4{margin:0 0 7px;font-size:13px;color:var(--blue-d);font-weight:800}
 .drow{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid var(--line);font-size:13.5px}
 .drow span{color:var(--sub)}.drow b{font-weight:700;text-align:right;color:var(--ink)}
-@media(max-width:700px){header .wrap{flex-direction:column;align-items:flex-start;gap:10px}.chips{margin-left:0}.brand{font-size:20px}}
+@media(max-width:700px){header .wrap{flex-direction:column;align-items:flex-start;gap:10px}.chips{margin-left:0}.brand{font-size:20px}body.dopen{padding-right:0}}
 </style>
 </head>
 <body>
@@ -183,7 +183,6 @@ a.ext{color:var(--blue);text-decoration:none;font-weight:600}a.ext:hover{text-de
   </div>
 </div>
 
-<div id="dimmer" onclick="closeDrawer()"></div>
 <aside id="drawer"></aside>
 
 <script>
@@ -193,7 +192,7 @@ const PAGE=50, BOARDS={};
 const grade=v=>(!v||v==='0')?'<span class="muted" style="margin:0">미공개</span>':v;
 const td=c=>'<td>'+c+'</td>';
 function dRow(l,v){return v?('<div class="drow"><span>'+l+'</span><b>'+v+'</b></div>'):'';}
-function closeDrawer(){$('#drawer').classList.remove('open');$('#dimmer').classList.remove('open');}
+function closeDrawer(){$('#drawer').classList.remove('open');document.body.classList.remove('dopen');}
 function openUniv(name){
   const info=UNIVINFO.find(function(u){return u.univ===name;})||{};
   const sch=SCHOL.find(function(s){return s.univ===name;});
@@ -234,14 +233,19 @@ function openUniv(name){
   if(z4)h+='<div class="dsec"><h4>📈 참고: '+zone+' 4년제 평균 취업률</h4>'+dRow('2025 취업률',z4.y25+'%')+'</div>';
   if(!h)h='<div class="muted">상세 데이터가 없습니다.</div>';
   $('#drawer').innerHTML='<div class="dhead"><div><div class="dt">'+name+'</div><div class="ds">'+zone+(estb?(' · '+estb):'')+'</div></div><button class="dclose" onclick="closeDrawer()">✕</button></div><div class="dbody">'+h+'</div>';
-  $('#drawer').classList.add('open');$('#dimmer').classList.add('open');
+  $('#drawer').classList.add('open');document.body.classList.add('dopen');
 }
 document.addEventListener('click',function(e){
-  if(e.target.closest('a')||e.target.closest('button')||e.target.closest('select')||e.target.closest('input'))return;
-  if(!e.target.closest('#metric,#tuition,#schol,#rate,#major'))return;
-  const tr=e.target.closest('tbody tr');if(!tr)return;
-  const td0=tr.querySelector('td');if(!td0)return;
-  const name=td0.textContent.trim();if(name&&name!=='-')openUniv(name);
+  if(e.target.closest('#drawer'))return;
+  const board=e.target.closest('#metric,#tuition,#schol,#rate,#major');
+  if(board){
+    if(!e.target.closest('a,button,select,input')){
+      const tr=e.target.closest('tbody tr');
+      if(tr){const td0=tr.querySelector('td');if(td0){const name=td0.textContent.trim();if(name&&name!=='-')openUniv(name);}}
+    }
+    return;
+  }
+  if(document.body.classList.contains('dopen'))closeDrawer();
 });
 document.addEventListener('keydown',function(e){if(e.key==='Escape')closeDrawer();});
 
