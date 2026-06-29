@@ -52,11 +52,25 @@ tbody tr:hover{background:#f6faff}
 #loading{text-align:center;padding:64px;color:var(--sub)}
 .diag{background:var(--tint);padding:10px 12px;border-radius:10px;border:1px solid var(--bd2)}
 a.ext{color:var(--blue);text-decoration:none;font-weight:600}a.ext:hover{text-decoration:underline}
+#metric tbody tr,#tuition tbody tr,#schol tbody tr,#rate tbody tr,#major tbody tr{cursor:pointer}
+#dimmer{position:fixed;inset:0;background:rgba(16,42,82,.34);z-index:40;opacity:0;pointer-events:none;transition:.2s}
+#dimmer.open{opacity:1;pointer-events:auto}
+#drawer{position:fixed;top:0;right:0;width:440px;max-width:93vw;height:100vh;background:#fff;border-left:1px solid var(--line);box-shadow:-12px 0 32px rgba(16,42,82,.16);transform:translateX(103%);transition:transform .26s cubic-bezier(.4,0,.2,1);z-index:50;overflow-y:auto}
+#drawer.open{transform:translateX(0)}
+.dhead{position:sticky;top:0;background:linear-gradient(135deg,var(--navy),var(--blue-d));color:#fff;padding:18px 20px;display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.dhead .dt{font-size:18px;font-weight:800;letter-spacing:-.02em;line-height:1.25}
+.dhead .ds{opacity:.85;font-size:12.5px;margin-top:3px}
+.dclose{background:rgba(255,255,255,.16);border:0;color:#fff;width:30px;height:30px;border-radius:8px;font-size:14px;cursor:pointer;flex:0 0 auto}
+.dbody{padding:16px 20px 48px}
+.dsec{margin-bottom:18px}
+.dsec h4{margin:0 0 7px;font-size:13px;color:var(--blue-d);font-weight:800}
+.drow{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid var(--line);font-size:13.5px}
+.drow span{color:var(--sub)}.drow b{font-weight:700;text-align:right;color:var(--ink)}
 @media(max-width:700px){header .wrap{flex-direction:column;align-items:flex-start;gap:10px}.chips{margin-left:0}.brand{font-size:20px}}
 </style>
 </head>
 <body>
-<div class="util"><div class="wrap">공공데이터 기반 대입 분석 · 라이브 데모</div></div>
+<div class="util"><div class="wrap">공공데이터 기반 대입 분석 · 표의 대학 행을 클릭하면 오른쪽에 상세 패널이 열립니다 ▸</div></div>
 <header><div class="wrap">
   <div class="brand">입시 <b>인사이트</b><small>공공데이터(대교협·전문대협) 기반 분석 도구</small></div>
   <div class="chips" id="chips"></div>
@@ -158,12 +172,59 @@ a.ext{color:var(--blue);text-decoration:none;font-weight:600}a.ext:hover{text-de
   </div>
 </div>
 
+<div id="dimmer" onclick="closeDrawer()"></div>
+<aside id="drawer"></aside>
+
 <script>
 const $=s=>document.querySelector(s);
 let UNIV=[],RATE=[],MAJOR=[],JEON=[],METRIC=[],REGION=[],TUITION=[],SCHOL=[],UNIVINFO=[],STAT={};
 const PAGE=50, BOARDS={};
 const grade=v=>(!v||v==='0')?'<span class="muted" style="margin:0">미공개</span>':v;
 const td=c=>'<td>'+c+'</td>';
+function dRow(l,v){return v?('<div class="drow"><span>'+l+'</span><b>'+v+'</b></div>'):'';}
+function closeDrawer(){$('#drawer').classList.remove('open');$('#dimmer').classList.remove('open');}
+function openUniv(name){
+  const info=UNIVINFO.find(function(u){return u.univ===name;})||{};
+  const sch=SCHOL.find(function(s){return s.univ===name;});
+  const tui=TUITION.find(function(t){return t.univ===name;});
+  const met={}; for(const m of METRIC){if(m.univ===name&&m.yr==='2025')met[m.ind]=m.v;}
+  const rate=RATE.filter(function(r){return r.name===name;});
+  const jeon=JEON.filter(function(j){return j.univ===name;}).slice(0,40);
+  const zone=info.zone||(tui&&tui.zone)||(sch&&sch.zone)||'';
+  const estb=info.estb||(tui&&tui.estb)||'';
+  let h='', cost='', reg=(tui&&tui.reg)||info.reg;
+  if(reg)cost+=dRow('평균 등록금',won(parseFloat(reg)));
+  if(sch){cost+=dRow('1인당 장학금',won(sch.per));cost+=dRow('실부담(등록금−장학)',sch.net<0?('<span style="color:#1f7a4d">장학>등록 '+won(-sch.net)+'</span>'):won(sch.net));cost+=dRow('교내 장학 비율',sch.inrate+'%');}
+  if(cost)h+='<div class="dsec"><h4>💰 비용</h4>'+cost+'</div>';
+  let sel='';
+  if(rate.length){const y={};rate.forEach(function(r){y[r.year]=r.rate;});sel+=dRow('경쟁률(2024→2025)',(y['2024']||'-')+' → '+(y['2025']||'-'));}
+  if(met['신입생충원율'])sel+=dRow('신입생 충원율',met['신입생충원율']+'%');
+  if(met['입학전형최종등록률'])sel+=dRow('입학전형 등록률',met['입학전형최종등록률']+'%');
+  if(met['중도탈락현황'])sel+=dRow('중도탈락률',met['중도탈락현황']+'%');
+  if(sel)h+='<div class="dsec"><h4>📊 선발·안정성</h4>'+sel+'</div>';
+  let base='';
+  if(info.students)base+=dRow('재학생',parseInt(info.students).toLocaleString()+'명');
+  if(info.founded)base+=dRow('설립일',info.founded);
+  if(info.addr)base+=dRow('주소',info.addr);
+  if(info.tel)base+=dRow('전화',info.tel);
+  if(info.hmpg)base+=dRow('홈페이지','<a class="ext" href="'+info.hmpg+'" target="_blank" rel="noopener">바로가기 ↗</a>');
+  if(base)h+='<div class="dsec"><h4>🏫 기본 정보</h4>'+base+'</div>';
+  if(jeon.length){
+    h+='<div class="dsec"><h4>🎓 전문대 합격선(학과)</h4><div style="overflow:auto"><table><tr><th>학과</th><th>모집</th><th>경쟁률</th><th>평균(학생부)</th></tr>'+
+      jeon.map(function(j){return '<tr><td>'+j.major+'</td><td>'+j.phase+'</td><td>'+((j.rate&&j.rate!=='0')?j.rate:'-')+'</td><td>'+grade(j.avgH)+'</td></tr>';}).join('')+'</table></div></div>';
+  }
+  if(!h)h='<div class="muted">상세 데이터가 없습니다.</div>';
+  $('#drawer').innerHTML='<div class="dhead"><div><div class="dt">'+name+'</div><div class="ds">'+zone+(estb?(' · '+estb):'')+'</div></div><button class="dclose" onclick="closeDrawer()">✕</button></div><div class="dbody">'+h+'</div>';
+  $('#drawer').classList.add('open');$('#dimmer').classList.add('open');
+}
+document.addEventListener('click',function(e){
+  if(e.target.closest('a')||e.target.closest('button')||e.target.closest('select')||e.target.closest('input'))return;
+  if(!e.target.closest('#metric,#tuition,#schol,#rate,#major'))return;
+  const tr=e.target.closest('tbody tr');if(!tr)return;
+  const td0=tr.querySelector('td');if(!td0)return;
+  const name=td0.textContent.trim();if(name&&name!=='-')openUniv(name);
+});
+document.addEventListener('keydown',function(e){if(e.key==='Escape')closeDrawer();});
 
 function makeBoard(id, all, head, rowFn, filtFn){
   const b={all:all, page:1, q:'', data:all};
